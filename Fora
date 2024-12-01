@@ -1,0 +1,13 @@
+import Pauthon
+
+fitxer = open(r"C:\Users\paull\OneDrive\Escritorio\Llenguatge de programació\Programa.txt", "r")
+contingut = fitxer.read()
+
+resultat = Pauthon.executa(contingut)
+
+text = repr(resultat.declaracions[len(resultat.declaracions) - 1])
+
+if len(resultat.declaracions) == 1:
+    print(repr(resultat.declaracions[0]))
+else:
+    print(text)
