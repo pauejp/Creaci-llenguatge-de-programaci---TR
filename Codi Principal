@@ -1,0 +1,597 @@
+##################
+#CONSTANTS
+##################
+
+Numeros = "0123456789"
+Lletres = "abcçdefghijklmnñopqrstuvwxyzABCÇDEFGHIJKLMNÑOPQRSTUVWXYZ"
+Lletres_Numeros = Lletres + Numeros
+
+
+##################
+#POSICIÓ
+##################
+
+class Posicio:
+    def __init__(self, idx, text_fitxer):
+        self.idx = idx
+        self.text_fitxer = text_fitxer
+    
+    def avança(self, car_actual=None):
+        self.idx += 1  
+        return self
+
+
+##################
+#TOKENS
+##################
+
+Num             = "Num"
+Num_float       = "Num float"
+Mes             = "Més"
+Menys           = "Menys"
+Mult            = "Mult"
+Div             = "Div"
+Epar            = "Epar"
+Dpar            = "Dpar"
+Identificador   = "Identificador"
+Clau            = "Clau"
+Igual           = "Igual"
+DobleIgual      = "DobleIgual"
+NoIgual         = "NoIgual"
+MenysQue        = "MenysQue"
+MesQue          = "MesQue"
+MenysOIgual     = "MenysOIgual"
+MesOIgual       = "MesOIgual"
+NovaLinia       = "NovaLinia"
+
+Claus = [
+    "VAR",
+    "PER",
+    "FINS",
+    "PAS",
+    "LLAVORS"
+]
+
+class Token:
+    def __init__(self, tipus, valor=None):
+        self.tipus = tipus
+        self.valor = valor
+    
+    def iguala(self, tipus, valor):
+        return self.tipus == tipus and self.valor == valor
+
+    def __repr__(self):
+        if self.valor: return f'{self.tipus}:{self.valor}'
+        return f'{self.tipus}'
+        
+
+##################
+#LEXER
+##################
+
+class Lexer:
+    def __init__(self, text):
+        self.text = text
+        self.pos = Posicio(-1, text)
+        self.car_actual = None
+        self.avança()
+
+    def avança(self):
+        self.pos.avança(self.car_actual)
+        if self.pos.idx < len(self.text):
+            self.car_actual = self.text[self.pos.idx]
+        else:
+            self.car_actual = None
+
+    def crear_tokens(self):
+        tokens = []
+
+        while self.car_actual != None:
+            if self.car_actual == " " or self.car_actual == "\t":
+                self.avança()
+            elif self.car_actual in "\n":
+                tokens.append(Token(NovaLinia))
+                self.avança()
+            elif self.car_actual in Numeros:
+                tokens.append(self.crear_numeros())
+            elif self.car_actual in Lletres:
+                tokens.append(self.crear_identificador())
+            elif self.car_actual == "+":
+                tokens.append(Token(Mes))
+                self.avança()
+            elif self.car_actual == "-":
+                tokens.append(Token(Menys))
+                self.avança()
+            elif self.car_actual == "*":
+                tokens.append(Token(Mult))
+                self.avança()
+            elif self.car_actual == "/":
+                tokens.append(Token(Div))
+                self.avança()
+            elif self.car_actual == "(":
+                tokens.append(Token(Epar))
+                self.avança()
+            elif self.car_actual == ")":
+                tokens.append(Token(Dpar))
+                self.avança()
+            elif self.car_actual == "!":
+                tokens.append(self.crea_no_igual())
+            elif self.car_actual == "=":
+                tokens.append(self.crea_igual())
+            elif self.car_actual == "<":
+                tokens.append(self.crea_menys_que())
+            elif self.car_actual == ">":
+                tokens.append(self.crea_mes_que())
+
+        return tokens
+
+    def crear_numeros(self):
+        num_str = ""
+        cont_punts = 0
+
+        while self.car_actual != None and self.car_actual in Numeros or self.car_actual == ".":
+            if self.car_actual == ".":
+                if cont_punts == 1: 
+                    break
+                else:
+                    cont_punts += 1
+                    num_str += "."
+            else:
+                num_str += self.car_actual
+            self.avança()
+        
+        if cont_punts == 0:
+            return Token(Num, int(num_str))
+        else:
+            return Token(Num_float, float(num_str))
+        
+    def crear_identificador(self):
+        id_text = ""
+
+        while self.car_actual != None and self.car_actual in Lletres_Numeros + "_":
+            id_text += self.car_actual
+            self.avança()
+        
+        if id_text in Claus:
+            tok_tipus = Clau 
+        else:
+            tok_tipus = Identificador
+        return Token(tok_tipus, id_text)
+    
+    def crea_no_igual(self):
+        self.avança()
+        
+        if self.car_actual == "=":
+            self.avança()
+            return Token(NoIgual)
+        
+        self.avança()
+        return None
+    
+    def crea_igual(self):
+        tok_tipus = Igual
+        self.avança()
+        
+        if self.car_actual == "=":
+            self.avança()
+            tok_tipus = DobleIgual
+
+        return Token(tok_tipus)
+    
+    def crea_menys_que(self):
+        tok_tipus = MenysQue
+        self.avança()
+        
+        if self.car_actual == "=":
+            self.avança()
+            tok_tipus = MenysOIgual
+
+        return Token(tok_tipus)
+    
+    def crea_mes_que(self):
+        tok_tipus = MesQue
+        self.avança()
+        
+        if self.car_actual == "=":
+            self.avança()
+            tok_tipus = MesOIgual
+
+        return Token(tok_tipus)
+
+##################
+#NODES
+##################
+
+class NodeNumero:
+    def __init__(self, tok):
+        self.tok = tok
+    
+    def __repr__(self):
+        return f'{self.tok}'
+    
+class NodeOpBinaria:
+    def __init__(self, node_esquerra, tok_op, node_dreta):
+        self.node_esquerra = node_esquerra
+        self.tok_op = tok_op
+        self.node_dreta = node_dreta
+    
+    def __repr__(self):
+        return f'({self.node_esquerra}, {self.tok_op}, {self.node_dreta})'
+
+class NodeOpUnaria:
+    def __init__(self, tok_op, node):
+        self.node = node
+        self.tok_op = tok_op
+    
+    def __repr__(self):
+        return f'({self.tok_op}, {self.node})'
+    
+class NodeAccessVar:
+    def __init__(self, nom_var_tok):
+        self.nom_var_tok = nom_var_tok
+
+class NodeAssignacioVar:
+    def __init__(self, nom_var_tok, node_valor):
+        self.nom_var_tok = nom_var_tok
+        self.node_valor = node_valor
+
+class NodePer:
+    def __init__(self, nom_var_tok, node_valor_inicial, node_valor_final, node_valor_pas, node_cos):
+        self.nom_var_tok = nom_var_tok
+        self.node_valor_inicial = node_valor_inicial
+        self.node_valor_final = node_valor_final
+        self.node_valor_pas = node_valor_pas
+        self.node_cos = node_cos
+
+class NodeDeclaracions:
+    def __init__(self, node_declaracions):
+        self.node_declaracions = node_declaracions
+
+
+##################
+#PARSER
+##################
+
+class Parser:
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.tok_idx = -1
+        self.avança()
+
+    def avança(self):
+        self.tok_idx += 1
+        if self.tok_idx < len(self.tokens):
+            self.tok_actual = self.tokens[self.tok_idx]
+        return self.tok_actual
+
+    def Parse(self):
+        res = self.Declaracions()
+        return res
+
+##################
+
+    def Declaracions(self):
+        declaracions = []
+
+        while self.tok_actual.tipus == NovaLinia:
+            self.avança()
+
+        declaracio = self.Expressio()
+        declaracions.append(declaracio)
+
+        mes_declaracions = True
+
+        while True:
+            nova_linia_contador = 0
+            while self.tok_actual.tipus == NovaLinia:
+                self.avança()
+                nova_linia_contador += 1
+            if nova_linia_contador == 0:
+                mes_declaracions = False
+
+            if mes_declaracions == False:
+                break
+            
+            declaracio = self.Expressio()
+            if not declaracio:
+                mes_declaracions = False
+                continue
+            declaracions.append(declaracio)
+        
+        return NodeDeclaracions(declaracions)
+
+
+    def Nombre(self):
+        tok = self.tok_actual
+
+        if tok.tipus in (Mes, Menys):
+            self.avança()
+            Nombre = self.Nombre()
+
+            return NodeOpUnaria(tok, Nombre)
+        
+        elif tok.tipus == Identificador:
+            self.avança()
+            return NodeAccessVar(tok)
+
+        elif tok.tipus in (Num, Num_float):
+            self.avança()
+            return NodeNumero(tok)
+        
+        elif tok.tipus == Epar:
+            self.avança()
+            expressio = self.Expressio()
+            
+            if self.tok_actual.tipus == Dpar:
+                
+                self.avança()
+                return expressio
+            
+        elif tok.iguala(Clau, "PER"):
+            expresio_per = self.expresio_per()
+            return expresio_per
+
+    def Producte(self):
+        return self.op_bin(self.Nombre, (Mult, Div))
+
+    def expresio_aritmetica(self):
+        return self.op_bin(self.Producte, (Mes, Menys))
+
+    def Expressio(self):
+
+        if self.tok_actual.iguala(Clau, "VAR"):
+            self.avança()
+
+            nom_var = self.tok_actual
+            self.avança()
+
+            self.avança()
+            expressio = self.Expressio()
+            
+            return NodeAssignacioVar(nom_var, expressio)
+
+        return self.op_bin(self.expresio_aritmetica, (DobleIgual, NoIgual, MenysQue, MesQue, MenysOIgual, MesOIgual)) 
+    
+    def expresio_per(self):
+        if self.tok_actual.iguala(Clau, "PER"):
+            self.avança()
+
+            if self.tok_actual.tipus == Identificador:
+                nom_var = self.tok_actual
+                self.avança()
+
+                if self.tok_actual.tipus == Igual:
+                    self.avança()
+                    valor_inicial = self.Expressio()
+
+                    if self.tok_actual.iguala(Clau, "FINS"):
+                        self.avança()
+                        valor_final = self.Expressio()
+
+                        if self.tok_actual.iguala(Clau, "PAS"):
+                            self.avança()
+                            valor_pas = self.Expressio()
+                        else:
+                            valor_pas = None
+
+                        if self.tok_actual.iguala(Clau, "LLAVORS"):
+                            self.avança()
+                            cos = self.Expressio()
+
+                            return NodePer(nom_var, valor_inicial, valor_final, valor_pas, cos)
+
+    
+##################
+
+    def op_bin(self, funcio, toks_op):
+        esquerra = funcio()
+
+        while self.tok_actual.tipus in toks_op:
+            tok_op = self.tok_actual
+            self.avança()
+            dreta  = funcio()
+            esquerra = NodeOpBinaria(esquerra, tok_op, dreta)
+        
+        return esquerra
+
+
+##################
+#VALORS
+##################
+
+class Numero:
+    def __init__(self, valor):
+        self.valor = valor
+
+    def suma(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(self.valor + altre.valor)
+
+    def resta(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(self.valor - altre.valor)
+        
+    def mult(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(self.valor * altre.valor)
+        
+    def div(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(self.valor / altre.valor)
+        
+    def comparacio_igual(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor == altre.valor))
+        
+    def comparacio_no_igual(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor != altre.valor))
+        
+    def comparacio_menys_que(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor < altre.valor))
+        
+    def comparacio_mes_que(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor > altre.valor))
+    
+    def comparacio_menys_igual(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor <= altre.valor))
+        
+    def comparacio_mes_igual(self, altre):
+        if isinstance(altre, Numero):
+            return Numero(int(self.valor >= altre.valor))
+        
+    def __repr__(self):
+        return str(self.valor)
+    
+class Declaracions:
+    def __init__(self, declaracions):
+        self.declaracions = declaracions
+
+    def __repr__(self):
+        return f'[{", ".join([str(x) for x in self.declaracions])}]'
+
+
+##################
+#VARIABLES
+##################
+
+class Variables:
+    def __init__(self):
+        self.llista_variables = None
+
+class LlistaVariables:
+    def __init__(self):
+        self.llista_variables = {}
+
+    def get(self, nom):
+        valor = self.llista_variables.get(nom, None)
+        return valor
+
+    def set(self, nom, valor):
+        self.llista_variables[nom] = valor
+
+
+##################
+#INTERPRETER
+##################
+
+class Interpreter:
+    def visita(self, node, variables):
+        nom_metode = f'visita_{type(node).__name__}'
+        metode = getattr(self, nom_metode)
+        return metode(node, variables)
+
+##################
+
+    def visita_NodeNumero(self, node, variables):
+        return Numero(node.tok.valor)
+
+    def visita_NodeOpBinaria(self, node, variables):
+        esquerra = self.visita(node.node_esquerra, variables)
+        dreta = self.visita(node.node_dreta, variables)
+
+        if node.tok_op.tipus == Mes:
+            resultat = esquerra.suma(dreta)
+        elif node.tok_op.tipus == Menys:
+            resultat = esquerra.resta(dreta)
+        elif node.tok_op.tipus == Mult:
+            resultat = esquerra.mult(dreta)
+        elif node.tok_op.tipus == Div:
+            resultat = esquerra.div(dreta)
+        elif node.tok_op.tipus == DobleIgual:
+            resultat = esquerra.comparacio_igual(dreta)
+        elif node.tok_op.tipus == NoIgual:
+            resultat = esquerra.comparacio_no_igual(dreta)
+        elif node.tok_op.tipus == MenysQue:
+            resultat = esquerra.comparacio_menys_que(dreta)
+        elif node.tok_op.tipus == MesQue:
+            resultat = esquerra.comparacio_mes_que(dreta)
+        elif node.tok_op.tipus == MenysOIgual:
+            resultat = esquerra.comparacio_menys_igual(dreta)
+        elif node.tok_op.tipus == MesOIgual:
+            resultat = esquerra.comparacio_mes_igual(dreta)
+
+        return resultat
+
+    def visita_NodeOpUnaria(self, node, variables):
+        numero = self.visita(node.node, variables)
+
+        if node.tok_op.tipus == Menys:
+            numero = numero.mult(Numero(-1))
+
+        return numero
+    
+    def visita_NodeAccessVar(self, node, variables):
+        nom_var = node.nom_var_tok.valor
+        valor = variables.llista_variables.get(nom_var)
+
+        return valor
+    
+    def visita_NodeAssignacioVar(self, node, variables):
+        nom_var = node.nom_var_tok.valor
+        valor = self.visita(node.node_valor, variables)
+        variables.llista_variables.set(nom_var, valor)
+
+        return valor
+    
+    def visita_NodePer(self, node, variables):
+
+        valor_inicial = self.visita(node.node_valor_inicial, variables)
+        valor_final = self.visita(node.node_valor_final, variables)
+
+        if node.node_valor_pas:
+            valor_pas = self.visita(node.node_valor_pas, variables)
+        else:
+            valor_pas = Numero(1)
+
+        i = valor_inicial.valor
+
+        if valor_pas.valor >= 0:
+            while i < valor_final.valor:
+                variables.llista_variables.set(node.nom_var_tok.valor, Numero(i))
+                i += valor_pas.valor
+
+                self.visita(node.node_cos, variables)
+        else:
+            while i > valor_final.valor:
+                variables.llista_variables.set(node.nom_var_tok.valor, Numero(i))
+                i += valor_pas.valor
+
+                self.visita(node.node_cos, variables)
+
+        return None
+    
+    def visita_NodeDeclaracions(self, node, variables):
+        declaracions = []
+
+        for node_declaracio in node.node_declaracions:
+            declaracions.append(self.visita(node_declaracio, variables))
+
+        return Declaracions(declaracions)
+
+
+#################
+#EXECUTA
+##################
+
+llista_variables = LlistaVariables()
+
+def executa(text):
+    #Generar tokens
+    lexer = Lexer(text)
+    tokens = lexer.crear_tokens()
+
+    #Generar arbre sintactic abstracte
+    parser = Parser(tokens)
+    asa = parser.Parse()
+
+    #Executar programa
+    interpreter = Interpreter()
+    variables = Variables()
+    variables.llista_variables = llista_variables
+    resultat = interpreter.visita(asa, variables)
+
+    return resultat
